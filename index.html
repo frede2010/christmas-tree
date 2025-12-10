@@ -482,8 +482,15 @@
 
                 // Base geometry is 1x1, we scale it later
                 const planeGeo = new THREE.PlaneGeometry(1, 1); 
-                // Frame geometry fits 1x1 initially
-                const frameGeo = new THREE.BoxGeometry(1.05, 1.05, 0.05);
+                
+                // Create frame geometry to exactly match the photo
+                // We'll create a very thin border (0.02 units in all directions)
+                const borderSize = 0.01; // 0.01 units border
+                const frameGeo = new THREE.BoxGeometry(
+                    1 + borderSize * 2, // Width: photo width + border on both sides
+                    1 + borderSize * 2, // Height: photo height + border on both sides
+                    0.05               // Depth: frame thickness
+                );
 
                 const photoMesh = new THREE.Mesh(planeGeo, mat);
                 const frameMesh = new THREE.Mesh(frameGeo, frameMat);
@@ -501,9 +508,9 @@
                     baseScale: 1.0,
                     aspect: imgAspect // Store aspect for animation
                 };
-
-                // Adjust frame to match aspect immediately
-                frameMesh.scale.x = imgAspect;
+                
+                // Store frame reference for later updates if needed
+                photoMesh.userData.frameMesh = frameMesh;
 
                 particleGroup.remove(oldParticle);
                 particleGroup.add(photoMesh);
@@ -734,6 +741,25 @@
 
                         // Force rotation to face camera
                         p.lookAt(camera.position);
+                        
+                        // Adjust material properties for better visibility in focus mode
+                        if (p.material && p.userData.isPhoto) {
+                            // Store original material properties if not already stored
+                            if (!p.userData.originalMaterialProps) {
+                                p.userData.originalMaterialProps = {
+                                    color: p.material.color.clone(),
+                                    roughness: p.material.roughness,
+                                    envMapIntensity: p.material.envMapIntensity,
+                                    emissive: p.material.emissive.clone()
+                                };
+                            }
+                            
+                            // Set brighter material properties for focus mode
+                            p.material.color.setHex(0xffffff); // Use white base color
+                            p.material.roughness = 0.3; // Reduce roughness for more light reflection
+                            p.material.envMapIntensity = 0.5; // Increase environment reflection
+                            p.material.emissive.setHex(0x111111); // Add slight emissive glow
+                        }
 
                     } else {
                         // Background particles move away
@@ -749,6 +775,10 @@
                 if (p.userData.isPhoto) {
                     // Apply aspect ratio to X, keep Y as height reference
                     p.scale.set(s * p.userData.aspect, s, s);
+                    
+                    // Ensure frame scales correctly with photo
+                    // The frame is already built into the photo mesh and uses the same scale
+                    // No additional scaling needed as it's already a child of the photo mesh
                 } else {
                     p.scale.set(s, s, s);
                 }
@@ -766,6 +796,14 @@
                     // Create a target point in outward direction
                     const target = new THREE.Vector3().copy(p.position).add(outwardDir);
                     p.lookAt(target);
+                    
+                    // Restore original material properties when not in focus mode
+                    if (p.material && p.userData.originalMaterialProps) {
+                        p.material.color.copy(p.userData.originalMaterialProps.color);
+                        p.material.roughness = p.userData.originalMaterialProps.roughness;
+                        p.material.envMapIntensity = p.userData.originalMaterialProps.envMapIntensity;
+                        p.material.emissive.copy(p.userData.originalMaterialProps.emissive);
+                    }
                 }
             });
 

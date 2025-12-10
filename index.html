@@ -597,62 +597,70 @@
         }
 
         function detectGestures() {
-            if (!handLandmarker || !webcam.videoWidth) return;
+            if (!handLandmarker || !webcam || !webcam.videoWidth) return;
 
-            let nowInMs = Date.now();
-            if (webcam.currentTime !== lastVideoTime) {
-                lastVideoTime = webcam.currentTime;
-                handResults = handLandmarker.detectForVideo(webcam, nowInMs);
-            }
-
-            if (handResults && handResults.landmarks.length > 0) {
-                controls.enabled = false; 
-                const landmarks = handResults.landmarks[0];
-                
-                // Map hand pos to rotation
-                targetRotation.x = (landmarks[9].y - 0.5) * 2; 
-                targetRotation.y = (landmarks[9].x - 0.5) * 2; 
-
-                // Detect gestures
-                const thumbTip = landmarks[4];
-                const indexTip = landmarks[8];
-                const wrist = landmarks[0];
-                
-                function dist(p1, p2) {
-                    return Math.sqrt(Math.pow(p1.x-p2.x, 2) + Math.pow(p1.y-p2.y, 2) + Math.pow(p1.z-p2.z, 2));
+            try {
+                let nowInMs = Date.now();
+                if (webcam.currentTime !== lastVideoTime) {
+                    lastVideoTime = webcam.currentTime;
+                    handResults = handLandmarker.detectForVideo(webcam, nowInMs);
                 }
 
-                const pinchDist = dist(thumbTip, indexTip);
-                const pinkyTip = landmarks[20];
-                const fingersOpenDist = dist(indexTip, wrist) + dist(pinkyTip, wrist);
+                if (handResults && handResults.landmarks && handResults.landmarks.length > 0) {
+                    controls.enabled = false; 
+                    const landmarks = handResults.landmarks[0];
+                    
+                    // Map hand pos to rotation - optimized for mobile screens
+                    targetRotation.x = (landmarks[9].y - 0.5) * 1.5; // Reduced sensitivity for mobile
+                    targetRotation.y = (landmarks[9].x - 0.5) * 1.5; // Reduced sensitivity for mobile
 
-                let newState = currentState;
-                const hint = document.getElementById('gesture-hint');
-
-                if (pinchDist < 0.05) {
-                    newState = STATES.FOCUS;
-                    hint.innerText = "Gesture: PINCH (Focus)";
-                } else if (fingersOpenDist > 0.8) { // Tuned threshold
-                    newState = STATES.SCATTER;
-                    hint.innerText = "Gesture: OPEN HAND (Scatter)";
-                } else if (fingersOpenDist < 0.4) {
-                    newState = STATES.TREE;
-                    hint.innerText = "Gesture: FIST (Tree)";
-                } else {
-                    hint.innerText = "Gesture: Tracking...";
-                }
-
-                if(newState !== currentState) {
-                    if (newState === STATES.FOCUS && currentState !== STATES.FOCUS) {
-                        const photos = particles.filter(p => p.userData.isPhoto);
-                        if (photos.length > 0) {
-                            focusedPhotoIndex = particles.indexOf(photos[Math.floor(Math.random() * photos.length)]);
-                        }
+                    // Detect gestures
+                    const thumbTip = landmarks[4];
+                    const indexTip = landmarks[8];
+                    const wrist = landmarks[0];
+                    
+                    function dist(p1, p2) {
+                        return Math.sqrt(Math.pow(p1.x-p2.x, 2) + Math.pow(p1.y-p2.y, 2) + Math.pow(p1.z-p2.z, 2));
                     }
-                    currentState = newState;
+
+                    const pinchDist = dist(thumbTip, indexTip);
+                    const pinkyTip = landmarks[20];
+                    const fingersOpenDist = dist(indexTip, wrist) + dist(pinkyTip, wrist);
+
+                    let newState = currentState;
+                    const hint = document.getElementById('gesture-hint');
+
+                    // Adjusted thresholds for mobile devices
+                    if (pinchDist < 0.08) { // Increased threshold for mobile
+                        newState = STATES.FOCUS;
+                        hint.innerText = "Gesture: PINCH (Focus)";
+                    } else if (fingersOpenDist > 0.7) { // Adjusted threshold for mobile
+                        newState = STATES.SCATTER;
+                        hint.innerText = "Gesture: OPEN HAND (Scatter)";
+                    } else if (fingersOpenDist < 0.35) { // Adjusted threshold for mobile
+                        newState = STATES.TREE;
+                        hint.innerText = "Gesture: FIST (Tree)";
+                    } else {
+                        hint.innerText = "Gesture: Tracking...";
+                    }
+
+                    if(newState !== currentState) {
+                        if (newState === STATES.FOCUS && currentState !== STATES.FOCUS) {
+                            const photos = particles.filter(p => p.userData.isPhoto);
+                            if (photos.length > 0) {
+                                focusedPhotoIndex = particles.indexOf(photos[Math.floor(Math.random() * photos.length)]);
+                            }
+                        }
+                        currentState = newState;
+                    }
+                } else {
+                    controls.enabled = true; 
+                    targetRotation.set(0, 0);
                 }
-            } else {
-                controls.enabled = true; 
+            } catch (error) {
+                console.warn('Gesture detection error:', error);
+                // Fallback to manual controls if gesture detection fails
+                controls.enabled = true;
                 targetRotation.set(0, 0);
             }
         }

@@ -26,6 +26,7 @@
             color: var(--gold);
             font-family: 'Times New Roman', serif;
             user-select: none;
+            touch-action: manipulation; /* Prevent double-tap zoom on mobile */
         }
 
         /* UI Containers */
@@ -88,11 +89,22 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
         }
 
-        .btn:hover {
+        .btn:hover, .btn:active {
             background: rgba(212, 175, 55, 0.2);
             box-shadow: 0 0 20px rgba(212, 175, 55, 0.4);
+        }
+
+        /* Hide Toggle Button */
+        #hide-toggle-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            font-size: 0.8rem;
+            pointer-events: auto;
         }
 
         .hint {
@@ -141,6 +153,74 @@
 
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+        /* Media Queries for Mobile Devices */
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2rem;
+                margin-top: 1rem;
+                letter-spacing: 3px;
+            }
+
+            .controls {
+                bottom: 20px;
+                gap: 10px;
+            }
+
+            .btn-group {
+                flex-direction: column;
+                gap: 8px;
+                width: 90%;
+            }
+
+            .btn {
+                padding: 10px 20px;
+                font-size: 0.8rem;
+                letter-spacing: 1px;
+                width: 100%;
+            }
+
+            #hide-toggle-btn {
+                top: 10px;
+                right: 10px;
+                padding: 6px 12px;
+                font-size: 0.7rem;
+            }
+
+            .hint {
+                font-size: 0.7rem;
+                text-align: center;
+                padding: 0 20px;
+            }
+
+            .spinner {
+                width: 40px;
+                height: 40px;
+            }
+
+            .loading-text {
+                font-size: 0.9rem;
+                letter-spacing: 2px;
+            }
+        }
+
+        /* Smaller mobile devices */
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5rem;
+                margin-top: 0.5rem;
+                letter-spacing: 2px;
+            }
+
+            .btn {
+                padding: 8px 16px;
+                font-size: 0.7rem;
+            }
+
+            .hint {
+                font-size: 0.6rem;
+            }
+        }
     </style>
     
     <!-- Import Maps -->
@@ -171,13 +251,14 @@
     <!-- Main UI -->
     <div id="ui-container">
         <h1>Merry Christmas</h1>
+        <button class="btn" id="hide-toggle-btn">Hide Controls</button>
         <div class="controls">
             <div class="btn-group">
                 <button class="btn" id="upload-btn">Add Memories</button>
                 <button class="btn" id="music-btn">♪ Play Music</button>
             </div>
             <input type="file" id="file-input" accept="image/*" multiple>
-            <div class="hint">Press 'H' to Hide Controls</div>
+            <div class="hint">Tap button to Hide/Show Controls</div>
             <div class="hint" id="gesture-hint">Waiting for Camera...</div>
         </div>
     </div>
@@ -267,6 +348,17 @@
             controls.dampingFactor = 0.05;
             controls.autoRotate = true;
             controls.autoRotateSpeed = 0.5;
+            
+            // Optimize for touch devices
+            controls.touchEnabled = true;
+            controls.enableZoom = true;
+            controls.enablePan = false; // Disable pan to avoid accidental moves
+            controls.rotateSpeed = 0.8; // Increase rotation sensitivity for touch
+            controls.zoomSpeed = 0.8; // Adjust zoom speed for touch
+            controls.minDistance = 8; // Set minimum zoom distance
+            controls.maxDistance = 20; // Set maximum zoom distance
+            controls.minPolarAngle = Math.PI / 6; // Restrict vertical rotation
+            controls.maxPolarAngle = Math.PI / 2; // Restrict vertical rotation
 
             // --- 2. PARTICLES ---
             createParticles();
@@ -423,6 +515,7 @@
             const fileInput = document.getElementById('file-input');
             const uploadBtn = document.getElementById('upload-btn');
             const musicBtn = document.getElementById('music-btn');
+            const hideToggleBtn = document.getElementById('hide-toggle-btn');
             const audio = document.getElementById('bg-music');
             
             uploadBtn.addEventListener('click', () => fileInput.click());
@@ -448,10 +541,21 @@
                 isMusicPlaying = !isMusicPlaying;
             });
 
+            // Hide/Show Controls Toggle
+            hideToggleBtn.addEventListener('click', () => {
+                const ui = document.getElementById('ui-container');
+                const isHidden = ui.style.opacity === '0';
+                ui.style.opacity = isHidden ? '1' : '0';
+                hideToggleBtn.innerText = isHidden ? 'Hide Controls' : 'Show Controls';
+            });
+
+            // Keyboard support still available for desktop
             window.addEventListener('keydown', (e) => {
                 if (e.key.toLowerCase() === 'h') {
                     const ui = document.getElementById('ui-container');
-                    ui.style.opacity = ui.style.opacity === '0' ? '1' : '0';
+                    const isHidden = ui.style.opacity === '0';
+                    ui.style.opacity = isHidden ? '1' : '0';
+                    hideToggleBtn.innerText = isHidden ? 'Hide Controls' : 'Show Controls';
                 }
             });
 
@@ -646,8 +750,14 @@
                     p.rotation.x += p.userData.rotationSpeed.x;
                     p.rotation.y += p.userData.rotationSpeed.y;
                 } else if (currentState !== STATES.FOCUS) {
-                    // Photos in tree/scatter mode align with Y axis
-                    p.lookAt(new THREE.Vector3(0, p.position.y, 0));
+                    // Photos in tree/scatter mode align with Y axis but face outward
+                    // Calculate outward direction from tree center
+                    const outwardDir = new THREE.Vector3().copy(p.position).normalize();
+                    outwardDir.y = 0; // Keep horizontal alignment
+                    outwardDir.normalize();
+                    // Create a target point in outward direction
+                    const target = new THREE.Vector3().copy(p.position).add(outwardDir);
+                    p.lookAt(target);
                 }
             });
 

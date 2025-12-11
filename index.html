@@ -251,20 +251,31 @@
     <!-- Main UI -->
     <div id="ui-container">
         <h1>Merry Christmas</h1>
-        <button class="btn" id="hide-toggle-btn">Hide Controls</button>
         <div class="controls">
-            <div class="btn-group">
-                <button class="btn" id="upload-btn">Add Memories</button>
-                <button class="btn" id="music-btn">♪ Play Music</button>
+                <div class="btn-group">
+                    <button class="btn" id="upload-btn">Add Memories</button>
+                    <button class="btn" id="music-btn">♪ Play Music</button>
+                </div>
+                <input type="file" id="file-input" accept="image/*" multiple>
             </div>
-            <input type="file" id="file-input" accept="image/*" multiple>
-            <div class="hint">Tap button to Hide/Show Controls</div>
-            <div class="hint" id="gesture-hint">Waiting for Camera...</div>
-        </div>
+        
+
     </div>
 
-    <!-- Webcam (Hidden) -->
-    <video id="webcam" style="display:none" autoplay playsinline></video>
+    <!-- Webcam (Visible in Bottom Left) -->
+    <video id="webcam" style="
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        width: 200px;
+        height: 150px;
+        border: 2px solid var(--gold);
+        border-radius: 10px;
+        object-fit: cover;
+        z-index: 100;
+        box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+        transform: scaleX(-1); /* Mirror the video for natural selfie view */
+    " autoplay playsinline muted></video>
 
     <script type="module">
         import * as THREE from 'three';
@@ -279,10 +290,12 @@
         // --- GLOBAL VARIABLES ---
         let scene, camera, renderer, composer, controls;
         let particles = [];
+        let snowParticles = [];
         let handLandmarker, webcam;
         let lastVideoTime = -1;
         let handResults = undefined;
         let particleGroup;
+        let snowGroup;
         
         // State Management
         const STATES = { TREE: 'TREE', SCATTER: 'SCATTER', FOCUS: 'FOCUS' };
@@ -312,7 +325,7 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 0.9; // Reduced exposure slightly
+            renderer.toneMappingExposure = 1.2; // Increased exposure for brighter images
             document.body.appendChild(renderer.domElement);
 
             // Lighting
@@ -325,7 +338,7 @@
             spotLight.penumbra = 0.5;
             scene.add(spotLight);
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
             scene.add(ambientLight);
 
             // Post-Processing (Bloom)
@@ -362,6 +375,7 @@
 
             // --- 2. PARTICLES ---
             createParticles();
+            createSnowParticles();
 
             // --- 3. UI ---
             setupUI();
@@ -456,6 +470,45 @@
             }
         }
 
+        function createSnowParticles() {
+            snowGroup = new THREE.Group();
+            scene.add(snowGroup);
+
+            const snowGeo = new THREE.SphereGeometry(0.03, 8, 8);
+            const snowMat = new THREE.MeshStandardMaterial({ 
+                color: 0xffffff, 
+                roughness: 0.8, 
+                metalness: 0.0,
+                emissive: 0x222222,
+                emissiveIntensity: 0.2
+            });
+
+            const SNOW_COUNT = 2000;
+
+            for (let i = 0; i < SNOW_COUNT; i++) {
+                const mesh = new THREE.Mesh(snowGeo, snowMat);
+                
+                // Random initial position
+                mesh.position.set(
+                    (Math.random() - 0.5) * 40,
+                    Math.random() * 20,
+                    (Math.random() - 0.5) * 40
+                );
+                
+                mesh.userData = {
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 0.02,
+                        -0.05 - Math.random() * 0.05,
+                        (Math.random() - 0.5) * 0.02
+                    ),
+                    rotationSpeed: (Math.random() - 0.5) * 0.01
+                };
+
+                snowGroup.add(mesh);
+                snowParticles.push(mesh);
+            }
+        }
+
         // --- 5. UPDATED PHOTO HANDLING ---
         function addPhoto(imgUrl) {
             const loader = new THREE.TextureLoader();
@@ -465,15 +518,17 @@
                 // 1. Calculate Aspect Ratio
                 const imgAspect = texture.image.width / texture.image.height;
 
-                // 2. Adjust Material to prevent overexposure/bloom burnout
-                // Use less metalness and environment reflection for photos
+                // 2. Adjust Material for better photo clarity and no overexposure
                 const mat = new THREE.MeshStandardMaterial({ 
                     map: texture, 
                     side: THREE.DoubleSide,
-                    roughness: 0.8,    // High roughness prevents sharp specular highlights
+                    roughness: 0.7,    // Higher roughness to reduce harsh reflections
                     metalness: 0.0,    // Non-metal
-                    envMapIntensity: 0.1, // Low reflection of environment map
-                    color: 0xcccccc // Slightly dim base color to compensate for Bloom
+                    envMapIntensity: 0.2, // Reduced reflection to prevent over-brightness
+                    color: 0xf0f0f0,   // Slightly dimmed base color to prevent white overexposure
+                    toneMapped: true,
+                    premultipliedAlpha: true, // Better handling of transparent textures
+                    transparent: false // Ensure proper rendering
                 });
                 
                 const frameMat = new THREE.MeshStandardMaterial({
@@ -522,7 +577,6 @@
             const fileInput = document.getElementById('file-input');
             const uploadBtn = document.getElementById('upload-btn');
             const musicBtn = document.getElementById('music-btn');
-            const hideToggleBtn = document.getElementById('hide-toggle-btn');
             const audio = document.getElementById('bg-music');
             
             uploadBtn.addEventListener('click', () => fileInput.click());
@@ -548,24 +602,6 @@
                 isMusicPlaying = !isMusicPlaying;
             });
 
-            // Hide/Show Controls Toggle
-            hideToggleBtn.addEventListener('click', () => {
-                const ui = document.getElementById('ui-container');
-                const isHidden = ui.style.opacity === '0';
-                ui.style.opacity = isHidden ? '1' : '0';
-                hideToggleBtn.innerText = isHidden ? 'Hide Controls' : 'Show Controls';
-            });
-
-            // Keyboard support still available for desktop
-            window.addEventListener('keydown', (e) => {
-                if (e.key.toLowerCase() === 'h') {
-                    const ui = document.getElementById('ui-container');
-                    const isHidden = ui.style.opacity === '0';
-                    ui.style.opacity = isHidden ? '1' : '0';
-                    hideToggleBtn.innerText = isHidden ? 'Hide Controls' : 'Show Controls';
-                }
-            });
-
             window.addEventListener('resize', onWindowResize, false);
         }
 
@@ -579,76 +615,129 @@
         // --- 6. MEDIAPIPE ---
         async function setupMediaPipe() {
             try {
+                // Load MediaPipe vision tasks
                 const vision = await FilesetResolver.forVisionTasks(
                     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
                 );
+                
+                // Create hand landmarker with optimized settings for mobile
                 handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-                        delegate: "GPU"
+                        delegate: "CPU" // Use CPU for better compatibility on mobile
                     },
                     runningMode: "VIDEO",
-                    numHands: 1
+                    numHands: 1,
+                    minHandDetectionConfidence: 0.5,
+                    minHandPresenceConfidence: 0.5,
+                    minTrackingConfidence: 0.5
                 });
 
                 webcam = document.getElementById('webcam');
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-                webcam.srcObject = stream;
-                webcam.addEventListener('loadeddata', () => {
-                    document.getElementById('gesture-hint').innerText = "Camera Active: Pinch to Focus";
+                
+                // Request camera stream with mobile-friendly settings
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: "user", // Use front camera
+                        width: { ideal: 480 }, // Ideal width for mobile
+                        height: { ideal: 480 }, // Ideal height for mobile
+                        frameRate: { ideal: 30 } // Ideal frame rate
+                    }
                 });
+                
+                webcam.srcObject = stream;
+                
+                // Set video attributes for mobile compatibility
+                webcam.playsinline = true;
+                webcam.autoplay = true;
+                webcam.muted = true; // Required for autoplay on many browsers
+                
+                // Wait for video to be ready
+                await new Promise((resolve) => {
+                    webcam.addEventListener('loadeddata', () => {
+                        console.log('Webcam loaded successfully');
+                        resolve();
+                    });
+                    
+                    webcam.addEventListener('error', (err) => {
+                        console.error('Webcam error:', err);
+                        resolve();
+                    });
+                });
+                
             } catch (err) {
-                console.warn("Camera/MP Error:", err);
-                document.getElementById('gesture-hint').innerText = "Camera Denied: Use Mouse Only";
-            }
+            console.warn("Camera/MP Error:", err);
+        }
         }
 
         function detectGestures() {
-            if (!handLandmarker || !webcam || !webcam.videoWidth) return;
+            // Check if handLandmarker and webcam are available
+            if (!handLandmarker || !webcam) {
+                return;
+            }
+            
+            // Ensure webcam is playing and has valid dimensions
+            if (webcam.paused || webcam.ended || !webcam.videoWidth || !webcam.videoHeight) {
+                return;
+            }
 
             try {
                 let nowInMs = Date.now();
+                
+                // Process video frame at a reasonable rate
                 if (webcam.currentTime !== lastVideoTime) {
                     lastVideoTime = webcam.currentTime;
-                    handResults = handLandmarker.detectForVideo(webcam, nowInMs);
+                    
+                    try {
+                        // Detect hand landmarks from video
+                        handResults = handLandmarker.detectForVideo(webcam, nowInMs);
+                    } catch (detectError) {
+                        console.warn('Hand detection error:', detectError);
+                        return;
+                    }
                 }
 
+                // Check if we have valid hand results
                 if (handResults && handResults.landmarks && handResults.landmarks.length > 0) {
                     controls.enabled = false; 
                     const landmarks = handResults.landmarks[0];
                     
-                    // Map hand pos to rotation - optimized for mobile screens
-                    targetRotation.x = (landmarks[9].y - 0.5) * 1.5; // Reduced sensitivity for mobile
-                    targetRotation.y = (landmarks[9].x - 0.5) * 1.5; // Reduced sensitivity for mobile
+                    // Map hand position to rotation - optimized for mobile
+                    // Normalize coordinates and adjust sensitivity
+                    const normalizedX = landmarks[9].x - 0.5;
+                    const normalizedY = landmarks[9].y - 0.5;
+                    
+                    targetRotation.x = normalizedY * 1.2; // Adjusted sensitivity for mobile
+                    targetRotation.y = normalizedX * 1.2; // Adjusted sensitivity for mobile
 
-                    // Detect gestures
+                    // Detect gestures with optimized thresholds
                     const thumbTip = landmarks[4];
                     const indexTip = landmarks[8];
                     const wrist = landmarks[0];
+                    const pinkyTip = landmarks[20];
                     
+                    // Calculate distances between landmarks
                     function dist(p1, p2) {
-                        return Math.sqrt(Math.pow(p1.x-p2.x, 2) + Math.pow(p1.y-p2.y, 2) + Math.pow(p1.z-p2.z, 2));
+                        return Math.sqrt(
+                            Math.pow(p1.x - p2.x, 2) + 
+                            Math.pow(p1.y - p2.y, 2) + 
+                            Math.pow(p1.z - p2.z, 2)
+                        );
                     }
 
                     const pinchDist = dist(thumbTip, indexTip);
-                    const pinkyTip = landmarks[20];
                     const fingersOpenDist = dist(indexTip, wrist) + dist(pinkyTip, wrist);
 
                     let newState = currentState;
-                    const hint = document.getElementById('gesture-hint');
 
-                    // Adjusted thresholds for mobile devices
-                    if (pinchDist < 0.08) { // Increased threshold for mobile
+                    // Optimized thresholds for mobile devices
+                    // These values are tuned for better performance on phone cameras
+                    if (pinchDist < 0.10) { // Increased threshold for mobile pinch detection
                         newState = STATES.FOCUS;
-                        hint.innerText = "Gesture: PINCH (Focus)";
-                    } else if (fingersOpenDist > 0.7) { // Adjusted threshold for mobile
+                    } else if (fingersOpenDist > 0.6) { // Adjusted for mobile open hand
                         newState = STATES.SCATTER;
-                        hint.innerText = "Gesture: OPEN HAND (Scatter)";
-                    } else if (fingersOpenDist < 0.35) { // Adjusted threshold for mobile
+                    } else if (fingersOpenDist < 0.4) { // Adjusted for mobile fist
                         newState = STATES.TREE;
-                        hint.innerText = "Gesture: FIST (Tree)";
-                    } else {
-                        hint.innerText = "Gesture: Tracking...";
                     }
 
                     if(newState !== currentState) {
@@ -660,10 +749,13 @@
                         }
                         currentState = newState;
                     }
+                    
                 } else {
+                    // No hand detected, enable manual controls
                     controls.enabled = true; 
                     targetRotation.set(0, 0);
                 }
+                
             } catch (error) {
                 console.warn('Gesture detection error:', error);
                 // Fallback to manual controls if gesture detection fails
@@ -754,11 +846,12 @@
                                 };
                             }
                             
-                            // Set brighter material properties for focus mode
-                            p.material.color.setHex(0xffffff); // Use white base color
-                            p.material.roughness = 0.3; // Reduce roughness for more light reflection
-                            p.material.envMapIntensity = 0.5; // Increase environment reflection
-                            p.material.emissive.setHex(0x111111); // Add slight emissive glow
+                            // Set balanced material properties for focus mode (keep original brightness)
+                            p.material.color.copy(p.userData.originalMaterialProps.color); // Use original color
+                            p.material.roughness = 0.7; // Higher roughness to reduce harsh reflections
+                            p.material.envMapIntensity = 0.2; // Reduced environment reflection
+                            p.material.emissive.setHex(0x000000); // No emissive glow
+                            p.material.metalness = 0.0; // Ensure non-metal appearance
                         }
 
                     } else {
@@ -805,6 +898,28 @@
                         p.material.emissive.copy(p.userData.originalMaterialProps.emissive);
                     }
                 }
+            });
+
+            // Snow Particle Animation
+            snowParticles.forEach((snow, i) => {
+                // Update position
+                snow.position.add(snow.userData.velocity);
+                
+                // Update rotation
+                snow.rotation.y += snow.userData.rotationSpeed;
+                snow.rotation.x += snow.userData.rotationSpeed;
+                
+                // Reset snow particles that fall below the scene
+                if (snow.position.y < -10) {
+                    snow.position.set(
+                        (Math.random() - 0.5) * 40,
+                        20,
+                        (Math.random() - 0.5) * 40
+                    );
+                }
+                
+                // Add some wind effect
+                snow.position.x += Math.sin(time * 0.3 + i * 0.1) * 0.005;
             });
 
             controls.update();

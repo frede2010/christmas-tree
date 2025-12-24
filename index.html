@@ -382,14 +382,24 @@
             const boxGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
             const sphereGeo = new THREE.SphereGeometry(0.06, 16, 16); // High poly
             const caneGeo = createCandyCaneGeometry(); // Procedural geometry
+            // [MODIFICATION 1] Add Snowflake/Crystal Geometry
+            const crystalGeo = new THREE.OctahedronGeometry(0.07, 0); 
             
             // Restore High Quality Materials (PBR)
             const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.1, metalness: 0.9 });
             const redMat = new THREE.MeshStandardMaterial({ color: 0x8a0000, roughness: 0.2, metalness: 0.6 });
             const greenMat = new THREE.MeshStandardMaterial({ color: 0x003300, roughness: 0.2, metalness: 0.6 });
+            // [MODIFICATION 1] Add White Ice/Snow Material
+            const snowMat = new THREE.MeshStandardMaterial({ 
+                color: 0xffffff, 
+                roughness: 0.2, 
+                metalness: 0.2,
+                emissive: 0xffffff,
+                emissiveIntensity: 0.4 
+            });
 
-            const geometries = [boxGeo, sphereGeo, caneGeo];
-            const materials = [goldMat, redMat, greenMat];
+            const geometries = [boxGeo, sphereGeo, caneGeo, crystalGeo];
+            const materials = [goldMat, redMat, greenMat, snowMat];
 
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const geo = geometries[Math.floor(Math.random() * geometries.length)];
@@ -608,8 +618,15 @@
             if (currentState !== STATES.FOCUS) {
                 currentRotation.lerp(targetRotation, 0.1);
                 if(!controls.enabled) {
-                    particleGroup.rotation.x = currentRotation.x;
-                    particleGroup.rotation.y = currentRotation.y;
+                    // [MODIFICATION 2] Force tree vertical in TREE mode
+                    if (currentState === STATES.TREE) {
+                        particleGroup.rotation.x = THREE.MathUtils.lerp(particleGroup.rotation.x, 0, 0.1);
+                        particleGroup.rotation.y = currentRotation.y;
+                    } else {
+                        // Allow free rotation/tilt in SCATTER mode
+                        particleGroup.rotation.x = currentRotation.x;
+                        particleGroup.rotation.y = currentRotation.y;
+                    }
                 } else {
                     particleGroup.rotation.y += 0.002;
                     particleGroup.rotation.x *= 0.95;

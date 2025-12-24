@@ -215,7 +215,7 @@
         // --- GLOBAL VARIABLES ---
         let scene, camera, renderer, composer, controls;
         let particles = [], snowParticles = [];
-        let particleGroup, snowGroup, starMesh; // Added starMesh
+        let particleGroup, snowGroup, starMesh; 
         
         // MediaPipe
         let handLandmarker, webcam;
@@ -237,13 +237,14 @@
         let currentRotation = new THREE.Vector2(0, 0);
         let focusedPhotoIndex = -1;
         
-        const PARTICLE_COUNT = 1500;
+        // Particle Count
+        const PARTICLE_COUNT = 1800;
         
         async function init() {
             // Scene
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x000000);
-            scene.fog = new THREE.FogExp2(0x000000, 0.015); // Slightly denser fog for depth
+            scene.fog = new THREE.FogExp2(0x000000, 0.015); 
 
             // Camera
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -257,7 +258,7 @@
             renderer.toneMappingExposure = 1.2;
             document.body.appendChild(renderer.domElement);
 
-            // Lighting (Visual Quality Restored)
+            // Lighting 
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
             scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
 
@@ -273,7 +274,7 @@
             // Post-Processing
             const renderScene = new RenderPass(scene, camera);
             const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-            bloomPass.threshold = 0.15; // Lower threshold for more glow
+            bloomPass.threshold = 0.15; 
             bloomPass.strength = 1.0; 
             bloomPass.radius = 0.5;
 
@@ -292,7 +293,7 @@
             // --- CREATE OBJECTS ---
             createParticles();
             createSnowParticles();
-            createStar(); // New Star Function
+            createStar(); 
             setupUI();
             
             // Init AI
@@ -305,7 +306,7 @@
             animate();
         }
 
-        // --- 1. VISUALS RESTORATION: Candy Cane Geometry ---
+        // --- 1. Geometry ---
         function createCandyCaneGeometry() {
             class CustomSinCurve extends THREE.Curve {
                 constructor(scale = 1) { super(); this.scale = scale; }
@@ -322,10 +323,10 @@
                     return optionalTarget.set(x, y, z).multiplyScalar(this.scale);
                 }
             }
-            return new THREE.TubeGeometry(new CustomSinCurve(0.2), 20, 0.02, 8, false);
+            return new THREE.TubeGeometry(new CustomSinCurve(0.3), 20, 0.03, 8, false);
         }
 
-        // --- NEW: Star Generation ---
+        // --- Star Generation ---
         function createStar() {
             if(!particleGroup) return;
 
@@ -335,7 +336,6 @@
             const innerRadius = 0.35;
 
             for (let i = 0; i < points * 2; i++) {
-                // Angle starting from top (PI/2)
                 const a = (i / (points * 2)) * Math.PI * 2 + Math.PI / 2;
                 const r = (i % 2 === 0) ? outerRadius : innerRadius;
                 const x = Math.cos(a) * r;
@@ -354,9 +354,8 @@
                 bevelThickness: 0.05 
             };
             const geo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-            geo.center(); // Pivot at center
+            geo.center(); 
 
-            // REDUCED BRIGHTNESS: Emissive intensity 0.7 (was 1.0)
             const mat = new THREE.MeshStandardMaterial({ 
                 color: 0xffd700,
                 emissive: 0xffaa00,
@@ -366,45 +365,52 @@
             });
 
             starMesh = new THREE.Mesh(geo, mat);
-            // Tree height is approx 10, range is roughly -5 to +5.
             starMesh.position.set(0, 5.5, 0); 
-            
-            // Add to group so it rotates with tree
             particleGroup.add(starMesh);
         }
 
-        // --- 2. VISUALS RESTORATION: High Quality Particles ---
+        // --- 2. Particles (With Twinkle Logic) ---
         function createParticles() {
             particleGroup = new THREE.Group();
             scene.add(particleGroup);
 
-            // Restore High Quality Geometries
-            const boxGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-            const sphereGeo = new THREE.SphereGeometry(0.06, 16, 16); // High poly
-            const caneGeo = createCandyCaneGeometry(); // Procedural geometry
-            // [MODIFICATION 1] Add Snowflake/Crystal Geometry
-            const crystalGeo = new THREE.OctahedronGeometry(0.07, 0); 
+            // Geometries (Large size)
+            const boxGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+            const sphereGeo = new THREE.SphereGeometry(0.12, 16, 16); 
+            const caneGeo = createCandyCaneGeometry(); 
+            const crystalGeo = new THREE.OctahedronGeometry(0.13, 0); 
             
-            // Restore High Quality Materials (PBR)
+            // Materials
             const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.1, metalness: 0.9 });
             const redMat = new THREE.MeshStandardMaterial({ color: 0x8a0000, roughness: 0.2, metalness: 0.6 });
             const greenMat = new THREE.MeshStandardMaterial({ color: 0x003300, roughness: 0.2, metalness: 0.6 });
-            // [MODIFICATION 1] Add White Ice/Snow Material
-            const snowMat = new THREE.MeshStandardMaterial({ 
-                color: 0xffffff, 
+            // Base Snow Material
+            const snowMatBase = new THREE.MeshStandardMaterial({ 
+                color: 0xeeeeee, 
                 roughness: 0.2, 
-                metalness: 0.2,
+                metalness: 0.3,
                 emissive: 0xffffff,
-                emissiveIntensity: 0.4 
+                emissiveIntensity: 0.2 
             });
 
-            const geometries = [boxGeo, sphereGeo, caneGeo, crystalGeo];
-            const materials = [goldMat, redMat, greenMat, snowMat];
+            const geometries = [boxGeo, boxGeo, sphereGeo, sphereGeo, caneGeo, crystalGeo];
+            const materials = [
+                goldMat, goldMat, goldMat, 
+                redMat, redMat, 
+                greenMat, greenMat, 
+                snowMatBase
+            ];
 
             for (let i = 0; i < PARTICLE_COUNT; i++) {
                 const geo = geometries[Math.floor(Math.random() * geometries.length)];
-                const mat = materials[Math.floor(Math.random() * materials.length)];
+                let mat = materials[Math.floor(Math.random() * materials.length)];
                 
+                let isSnow = false;
+                if (mat === snowMatBase) {
+                    mat = mat.clone(); 
+                    isSnow = true;
+                }
+
                 const mesh = new THREE.Mesh(geo, mat);
                 
                 // Tree Formation
@@ -437,7 +443,10 @@
                     rotationSpeed: new THREE.Vector3((Math.random()-0.5)*0.02, (Math.random()-0.5)*0.02, 0),
                     isPhoto: false,
                     baseScale: 1,
-                    aspect: 1
+                    aspect: 1,
+                    isSnow: isSnow,
+                    twinklePhase: Math.random() * Math.PI * 2,
+                    twinkleSpeed: 2 + Math.random() * 3
                 };
 
                 particleGroup.add(mesh);
@@ -469,12 +478,13 @@
             loader.load(imgUrl, (texture) => {
                 texture.colorSpace = THREE.SRGBColorSpace;
                 const aspect = texture.image.width / texture.image.height;
-                // High quality photo material
-                const mat = new THREE.MeshStandardMaterial({ 
+                
+                // [OPTIMIZATION] Use MeshBasicMaterial to avoid overexposure from scene lights.
+                // We also darken the color (0xcccccc) to compensate for toneMappingExposure=1.2 and Bloom.
+                const mat = new THREE.MeshBasicMaterial({ 
                     map: texture, 
-                    roughness: 0.7, 
-                    metalness: 0.0,
-                    side: THREE.DoubleSide
+                    side: THREE.DoubleSide,
+                    color: 0xcccccc 
                 });
                 
                 const frameMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 1.0, roughness: 0.1 });
@@ -493,14 +503,14 @@
             });
         }
 
-        // --- 3. OPTIMIZED AI ---
+        // --- 3. AI Setup ---
         async function setupMediaPipe() {
             try {
                 const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
                 handLandmarker = await HandLandmarker.createFromOptions(vision, {
                     baseOptions: {
                         modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
-                        delegate: "CPU" // Safe mode
+                        delegate: "CPU" 
                     },
                     runningMode: "VIDEO",
                     numHands: 1,
@@ -510,7 +520,6 @@
                 });
                 
                 webcam = document.getElementById('webcam');
-                // Request slightly lower res for performance
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360, frameRate: 30 } }); 
                 webcam.srcObject = stream;
                 
@@ -523,11 +532,7 @@
 
         function detectGestures() {
             const now = Date.now();
-            
-            // Throttle: Max 10 checks per second
-            if (!handLandmarker || !webcam || webcam.paused || (now - lastDetectionTime < detectionInterval)) {
-                return;
-            }
+            if (!handLandmarker || !webcam || webcam.paused || (now - lastDetectionTime < detectionInterval)) return;
             lastDetectionTime = now;
 
             if (webcam.currentTime !== lastVideoTime) {
@@ -541,14 +546,10 @@
 
             if (handResults && handResults.landmarks.length > 0) {
                 const lm = handResults.landmarks[0];
-                
-                // Normalized Hand Coordinates for Rotation
                 targetRotation.set((lm[9].y - 0.5) * 2, (lm[9].x - 0.5) * 2);
 
-                // Adaptive Distances
                 function dist(a, b) { return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2); }
                 const handSize = dist(lm[0], lm[9]); 
-                
                 const pinch = dist(lm[4], lm[8]) / handSize;
                 const open = (dist(lm[8], lm[0]) + dist(lm[12], lm[0]) + dist(lm[16], lm[0]) + dist(lm[20], lm[0])) / 4 / handSize;
 
@@ -557,7 +558,6 @@
                 else if (open > 1.3) detected = STATES.SCATTER;
                 else if (open < 0.9) detected = STATES.TREE;
 
-                // Debounce Logic
                 if (detected !== currentState) {
                     if (detected === pendingState) {
                         stateHoldTimer += (now - lastCheckTime);
@@ -577,7 +577,6 @@
                     pendingState = null;
                     stateHoldTimer = 0;
                 }
-                
                 controls.enabled = false;
                 statusDiv.innerText = `Gesture: ${currentState}`;
                 statusDiv.style.opacity = 1;
@@ -594,7 +593,6 @@
             document.getElementById('file-input').onchange = (e) => {
                 if(e.target.files[0]) Array.from(e.target.files).forEach(f => addPhoto(URL.createObjectURL(f)));
             };
-            
             const btn = document.getElementById('music-btn');
             const audio = document.getElementById('bg-music');
             btn.onclick = () => {
@@ -608,7 +606,7 @@
             };
         }
 
-        // --- 4. ANIMATION ---
+        // --- 4. Animation ---
         function animate() {
             requestAnimationFrame(animate);
             detectGestures(); 
@@ -618,12 +616,11 @@
             if (currentState !== STATES.FOCUS) {
                 currentRotation.lerp(targetRotation, 0.1);
                 if(!controls.enabled) {
-                    // [MODIFICATION 2] Force tree vertical in TREE mode
                     if (currentState === STATES.TREE) {
+                        // Force Vertical
                         particleGroup.rotation.x = THREE.MathUtils.lerp(particleGroup.rotation.x, 0, 0.1);
                         particleGroup.rotation.y = currentRotation.y;
                     } else {
-                        // Allow free rotation/tilt in SCATTER mode
                         particleGroup.rotation.x = currentRotation.x;
                         particleGroup.rotation.y = currentRotation.y;
                     }
@@ -632,17 +629,12 @@
                     particleGroup.rotation.x *= 0.95;
                 }
             } else {
-                // Stabilize logic
                 particleGroup.rotation.y += (0 - particleGroup.rotation.y) * 0.05;
                 particleGroup.rotation.x += (0 - particleGroup.rotation.x) * 0.05;
             }
 
-            // --- Star Animation (Blinking & Scaling) ---
             if(starMesh) {
-                // REDUCED BRIGHTNESS: Scaled the formula to 70% of previous intensity
-                // Previous was 1.0 base, now 0.7 base
                 starMesh.material.emissiveIntensity = 0.7 + Math.sin(time * 3) * 0.35; 
-                // Subtle scale pulse
                 const pulse = 1 + Math.sin(time * 4) * 0.05;
                 starMesh.scale.set(pulse, pulse, pulse);
             }
@@ -652,10 +644,17 @@
                 let targetScale = p.userData.baseScale;
                 let damping = 0.05;
 
+                // Twinkle logic for snow particles
+                if (p.userData.isSnow) {
+                    const t = time * p.userData.twinkleSpeed + p.userData.twinklePhase;
+                    // Oscillate between 0.1 (dim) and 0.4 (peak)
+                    const intense = 0.25 + Math.sin(t) * 0.15;
+                    p.material.emissiveIntensity = intense;
+                }
+
                 if (currentState === STATES.TREE) {
                     targetPos.copy(p.userData.treePos);
                     targetPos.y += Math.sin(time + i*0.1) * 0.05;
-                    // Photo logic: face outward
                     if(p.userData.isPhoto) {
                          const outward = new THREE.Vector3().copy(p.position).normalize();
                          outward.y = 0;
@@ -688,14 +687,11 @@
                 }
             });
 
-            // Handle Star Visibility Logic based on State
             if(starMesh) {
                 if(currentState === STATES.TREE) {
                     starMesh.visible = true;
-                    // Ensure star stays at top relative to group rotation
                     starMesh.position.y = THREE.MathUtils.lerp(starMesh.position.y, 5.5, 0.1);
                 } else {
-                    // Hide star or make it scatter far away in other modes
                     starMesh.visible = false; 
                 }
             }
